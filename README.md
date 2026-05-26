@@ -4,6 +4,14 @@
 
 ---
 
+## ⬇️ Install
+
+**[Download morning-briefing.skill →](https://github.com/Amitro123/morning-briefing-dashboard/releases/latest/download/morning-briefing.skill)**
+
+Then: Claude Desktop → Cowork → Plugins → **Install from file**
+
+---
+
 ## What it does
 
 ```
@@ -47,24 +55,32 @@ Claude pulls from your connected Microsoft 365 sources, classifies everything by
 
 ## Installation
 
-### Cowork (Claude Desktop)
+### Option 1 — Cowork (Claude Desktop) ✅ Recommended
 
-1. Download `morning-briefing.skill` from [Releases](https://github.com/Amitro123/morning-briefing-dashboard/releases)
-2. Claude Desktop → Cowork → **Plugins → Install from file**
+1. **[Download morning-briefing.skill](https://github.com/Amitro123/morning-briefing-dashboard/releases/latest/download/morning-briefing.skill)**
+2. Claude Desktop → Cowork → Plugins → **Install from file** → select the `.skill` file
 
-### Claude Code (CLI)
+### Option 2 — Claude Code (CLI)
 
 ```bash
 # macOS / Linux
 cp -r morning-briefing/ ~/.claude/skills/
 
-# Windows
+# Windows (PowerShell)
 Copy-Item -Recurse morning-briefing\ "$env:APPDATA\Claude\skills\"
 ```
 
-### IDE agent (Cursor, Windsurf, etc.)
+### Option 3 — IDE agent (Cursor, Windsurf, etc.)
 
 Drop this repo into your project root. The agent reads `CLAUDE.md` → follows `morning-briefing/SKILL.md` automatically.
+
+---
+
+## Connecting sources
+
+**Outlook / Teams / SharePoint / Calendar** — Cowork → Plugins → Connectors → Connect → authorize Microsoft 365
+
+**Jira / Obsidian / Notion** — just paste in chat, no connector needed
 
 ---
 
@@ -74,18 +90,11 @@ Drop this repo into your project root. The agent reads `CLAUDE.md` → follows `
 start my day
 morning briefing
 what's on my plate today?
+מה יש לי היום?
 organize my tasks — here's my Jira: [paste]
 end my day
 set up my morning briefing every day at 7:30am
 ```
-
----
-
-## Connecting sources
-
-**Outlook / Teams / SharePoint / Calendar** — Cowork → Plugins → Connectors → Connect → authorize Microsoft 365
-
-**Jira / Obsidian / Notion** — just paste in chat, no connector needed
 
 ---
 
@@ -102,9 +111,9 @@ set up my morning briefing every day at 7:30am
 
 ```
 morning-briefing-dashboard/
-├── README.md                  ← you are here (human docs)
+├── README.md                  ← you are here
 ├── CLAUDE.md                  ← IDE agent entry point → points to SKILL.md
-├── morning-briefing.skill     ← installable skill file for Cowork / Claude Code
+├── morning-briefing.skill     ← installable skill file (Cowork / Claude Code)
 └── morning-briefing/
     └── SKILL.md               ← canonical spec (single source of truth)
 ```
