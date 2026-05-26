@@ -1,4 +1,6 @@
-# Morning Briefing Dashboard — Claude Skill (Microsoft 365 Edition)
+# Morning Briefing Dashboard — Claude Skill
+
+![version](https://img.shields.io/badge/version-1.1.0-blue)
 
 > One prompt → interactive daily kanban board, built from your real inbox, calendar, and tasks.
 
@@ -6,7 +8,7 @@
 
 ## ⬇️ Install
 
-**[Download morning-briefing.skill →](https://github.com/Amitro123/morning-briefing-dashboard/releases/latest/download/morning-briefing.skill)**
+**[Download morning-briefing.skill →](https://github.com/Amitro1234/morning-briefing-dashboard/releases/latest/download/morning-briefing.skill)**
 
 Then: Claude Desktop → Cowork → Plugins → **Install from file**
 
@@ -18,14 +20,14 @@ Then: Claude Desktop → Cowork → Plugins → **Install from file**
 start my day
 ```
 
-Claude pulls from your connected Microsoft 365 sources, classifies everything by urgency, and produces a standalone HTML file you open in any browser:
+Claude pulls from your connected sources, classifies everything by urgency, and produces a standalone HTML file you open in any browser:
 
 | Feature | Details |
 |---------|---------|
 | 📋 Drag & drop | Move cards between **Todo / In Progress / Done** |
 | ➕ Add tasks | `+` button in each column — title + priority tag |
 | ✕ Delete | Hover any card to reveal the delete button |
-| 🔗 Deep links | Cards link directly to Outlook threads, Teams messages, Jira tickets, SharePoint docs |
+| 🔗 Deep links | Cards link directly to original emails, tickets, calendar events |
 | 🌐 Zero dependencies | Self-contained HTML — no server, no npm, no internet needed |
 | 🌙 EOD mode | `end my day` → daily wrap-up: accomplished / carryover / tomorrow's focus |
 
@@ -35,19 +37,21 @@ Claude pulls from your connected Microsoft 365 sources, classifies everything by
 
 ### Auto-pull (MCP connectors)
 
-| Source | What gets pulled |
-|--------|-----------------|
-| **Outlook Email** | Inbox threads, last 2 days |
-| **Outlook Calendar** | Today's events + meeting prep cards |
-| **Microsoft Teams** | DMs and mentions, last 24h |
-| **SharePoint** | Documents updated today |
+Works with any connected source — the skill detects what's available and pulls accordingly:
+
+| Source type | Examples |
+|-------------|---------|
+| **Email** | Outlook, Gmail |
+| **Calendar** | Outlook Calendar, Google Calendar |
+| **Tasks & issues** | Jira, Linear, Asana, Notion |
+| **Chat** | Teams, Slack — used only if no other data available |
 
 ### Paste-in (no connector needed)
 
 | Source | How |
 |--------|-----|
-| **Jira** | Copy tickets / board view → paste in chat — ticket IDs, status, and priority parsed automatically |
-| **Obsidian** | Paste daily note — `- [ ]` / `- [/]` / `- [x]` mapped to Todo / In Progress / Done |
+| **Jira** | Copy tickets / board view → paste in chat |
+| **Obsidian** | Paste daily note — `- [ ]` / `- [/]` / `- [x]` → Todo / In Progress / Done |
 | **Notion** | Paste exported content or page text |
 | **Any text** | Free-form — Claude figures it out |
 
@@ -57,7 +61,7 @@ Claude pulls from your connected Microsoft 365 sources, classifies everything by
 
 ### Option 1 — Cowork (Claude Desktop) ✅ Recommended
 
-1. **[Download morning-briefing.skill](https://github.com/Amitro123/morning-briefing-dashboard/releases/latest/download/morning-briefing.skill)**
+1. **[Download morning-briefing.skill](https://github.com/Amitro1234/morning-briefing-dashboard/releases/latest/download/morning-briefing.skill)**
 2. Claude Desktop → Cowork → Plugins → **Install from file** → select the `.skill` file
 
 ### Option 2 — Claude Code (CLI)
@@ -78,9 +82,9 @@ Drop this repo into your project root. The agent reads `CLAUDE.md` → follows `
 
 ## Connecting sources
 
-**Outlook / Teams / SharePoint / Calendar** — Cowork → Plugins → Connectors → Connect → authorize Microsoft 365
+Connect any source via Cowork → Plugins → Connectors. The skill works with whatever is connected — no need for all of them.
 
-**Jira / Obsidian / Notion** — just paste in chat, no connector needed
+For paste-in sources (Jira, Obsidian, Notion, etc.) — just paste content directly in chat, no connector needed.
 
 ---
 

@@ -1,228 +1,213 @@
 ---
 name: morning-briefing
+version: 1.1.0
 description: >
   Generates a daily morning briefing as an interactive HTML kanban board (Todo / In Progress / Done).
-  Auto-pulls from connected Microsoft 365 sources — Outlook email, Outlook Calendar, Microsoft Teams,
-  SharePoint — and also accepts pasted content from Jira, Obsidian, Notion, or any free text.
-  Use this skill whenever the user asks for a morning briefing, daily dashboard, "what's on my plate today",
-  standup prep, daily task overview, or wants to organize their emails and tasks into a visual board.
-  Also triggers for "start my day", "תתחיל את היום שלי", "מה יש לי היום", "organize my tasks",
-  "what should I focus on today", "kanban from my emails", or when the user pastes a block of tasks/emails.
-  Also handles EOD / end-of-day mode when user says "end my day", "סיים את היום שלי", "EOD summary".
+  Works with ANY connected source — Outlook, Gmail, Google Calendar, Jira, Notion, Obsidian, Slack,
+  Teams, Linear, Asana, or plain pasted text. Use when the user asks for a morning briefing,
+  daily dashboard, "start my day", "תתחיל את היום שלי", "מה יש לי היום", "what's on my plate",
+  standup prep, or pastes tasks/emails to organize. Also handles EOD mode: "end my day", "סיים את היום".
 ---
 
 # Morning Briefing — Daily Kanban Dashboard
 
-Produces a self-contained HTML file: `morning_briefing_YYYY-MM-DD.html`
-Features: drag-and-drop kanban (Todo / In Progress / Done), AI priority scoring, meeting prep cards,
-cards from live Microsoft 365 sources or pasted text, `+` button per column for manual tasks,
-`✕` delete on hover, deep links to source items.
+Produces: `morning_briefing_YYYY-MM-DD.html` — self-contained, no dependencies.
 
-Supports two modes — detect from user intent:
-- **Morning mode** (default): full board build from all sources
-- **EOD mode**: triggered by "end my day" / "EOD summary" — shows what's done, what's open, what moves to tomorrow
+---
+
+## IMPORTANT: efficiency rules
+
+- **Token budget is precious.** Pull the minimum needed. Do NOT fetch full email bodies.
+- **Max items per source: 10.** Stop there even if more exist.
+- **Call only sources that are actually connected.** Check tool availability before calling.
+- **Do not call Teams/Slack/SharePoint by default** — only if the user asks or no other source has data.
+- **One pass.** Classify directly from search result summaries. Do not re-read items.
+- **Timezone:** Calendar tools return UTC. Always convert to the user's local time before displaying. If unknown, ask once. Israel = UTC+3 (IDT, summer).
 
 ---
 
 ## Step 1 — Detect mode
 
-| User says | Mode |
-|-----------|------|
-| "start my day", "morning briefing", "מה יש לי היום" | **Morning** |
-| "end my day", "EOD", "סיים את היום", "wrap up" | **EOD** |
-
-If EOD → skip to [EOD Section](#eod-mode) at the bottom.
+| Trigger | Mode |
+|---------|------|
+| "start my day", "morning briefing", "מה יש לי" | **Morning** (default) |
+| "end my day", "EOD", "סיים את היום" | **EOD** → skip to EOD section |
 
 ---
 
-## Step 2 — Gather data (Morning mode)
+## Step 2 — Discover and pull data
 
-Pull from all available sources **in parallel**.
+### 2a. Check what's connected
 
-### MCP connectors (auto-pull if tools are available)
+Before pulling anything, identify which tools are available. Pull **only** from connected sources, in this priority order:
 
-| Source | Tool | Query |
-|--------|------|-------|
-| Outlook Email | `outlook_email_search` | last 2 days, inbox, unread/flagged first — up to 20 items |
-| Outlook Calendar | `outlook_calendar_search` | today full day, user timezone |
-| Microsoft Teams | `chat_message_search` | last 24h, mentions of user or direct messages — up to 15 items |
-| SharePoint | `sharepoint_search` | documents modified today relevant to user — up to 10 items |
+| Priority | Source type | Tool to use | Query / filter |
+|----------|-------------|-------------|----------------|
+| 1 | Email (any) | `outlook_email_search` / `gmail search_threads` / etc. | Last 48h, unread or flagged, **limit 10** |
+| 2 | Calendar (any) | `outlook_calendar_search` / `google calendar list_events` / etc. | Today only, **limit 10** |
+| 3 | Tasks/issues | `jira search` / `linear issues` / `asana tasks` / `notion query` / etc. | Assigned to user, open, **limit 10** |
+| 4 | Chat (optional) | `slack search` / `teams chat_message_search` / etc. | Only if email+calendar return <3 items total |
 
-> If a connector returns an error, skip it silently and continue with what's available.
+### 2b. Pasted input
 
-### Pasted input (no connector needed)
+If the user pastes content alongside or instead of connected data, parse it:
 
-Accept any pasted content alongside or instead of MCP data:
+| Format | How to parse |
+|--------|-------------|
+| Jira board/list | Extract: ticket ID, summary, status, priority |
+| Obsidian daily note | `- [ ]` → Todo · `- [/]` → In Progress · `- [x]` → Done |
+| Notion paste | Checkbox items and status properties |
+| Outlook/Gmail email text | Sender, subject, urgency signals |
+| Linear / Asana export | Task name, status, assignee |
+| Any free text | Extract task-like items; infer urgency from language |
 
-| Format | Signals to extract |
-|--------|--------------------|
-| Jira board / ticket list | Ticket ID (e.g. `PROJ-123`), status, assignee, priority label |
-| Jira export (CSV/text) | Parse columns: Summary, Status, Priority, Assignee |
-| Obsidian daily note | `- [ ]` → Todo, `- [x]` → Done, `- [/]` → In Progress, headings as context |
-| Notion export / paste | Checkbox items, status properties, page titles |
-| Outlook email subjects | Sender, subject, urgency keywords (`FWD:`, `RE:`, `URGENT`, deadline dates) |
-| Free text / any list | Extract task-like items; infer urgency from language |
+### 2c. Nothing available
 
-If nothing is available and nothing is pasted, ask:
-> "רוצה להדביק אימיילים, Jira tickets, או רשימת tasks? אני אסדר הכל."
+If no tools are connected and nothing is pasted:
+> "רוצה להדביק תוכן? Jira tickets, אימיילים, Obsidian note — אני אסדר הכל."
+
+Do NOT generate a board with invented data.
 
 ---
 
-## Step 3 — Classify and score items
+## Step 3 — Classify (one pass, directly from summaries)
+
+### What to skip entirely (no card)
+
+- Automated system emails (monitoring alerts, CI notifications with no failure, password resets, newsletters, ratings reports, HR announcements)
+- Calendar events marked `showAs: free` or `isCancelled: true`
+- Calendar events marked `tentative` — include only if they have an explicit Zoom/Teams link (mark with ⚠️ tentative)
+- Chat messages that are pure reactions, short replies ("כן", "אני שומע", links only)
 
 ### Column mapping
 
 | Signal | Column |
 |--------|--------|
-| Requires reply, fix, decision, or approval | **Todo** |
-| Ongoing, pending someone else, event to prepare for, Jira "In Review" / "In Progress" | **In Progress** |
-| Confirmations, FYI, read-only notifications, Jira "Done" / "Closed" | **Done** (0.6 opacity) |
-| Newsletters, automated alerts with no action needed | One grouped card, or skip |
+| Requires a reply, decision, fix, or approval from the user | **Todo** |
+| Ongoing work, waiting on someone else, confirmed calendar event today, Jira "In Progress" / "In Review" | **In Progress** |
+| FYI only, read and no action needed, Jira "Done" / "Closed", confirmed/received | **Done** |
 
-Don't create a card for every item — use judgment. Max ~5 cards per column; group low-priority items.
-Jira items in "Waiting for Review" status where the user is the reporter → **In Progress**.
+**Max 5 cards per column.** If more items qualify, group the lowest-priority ones into a single "וכו'..." card.
 
-### AI Priority scoring
-
-For each card, infer priority from content, sender, and context:
+### Priority badges
 
 | Badge | When |
 |-------|------|
-| 🔴 Urgent | Deadline today, CI failure, escalation, manager/CIO in sender, Jira P1/P2 |
-| 🟡 Medium | Action needed this week, Jira P3, Teams mention without urgency |
-| 🔵 Strategic | AI initiative, architecture decision, stakeholder sync, new project scoping |
-| 🟢 Event | Calendar item, confirmed meeting — include time in card title |
+| 🔴 Urgent | Deadline today, explicit escalation, Jira P1/P2, direct manager |
+| 🟡 Medium | Action needed this week, Jira P3, normal business email |
+| 🔵 Strategic | Architecture decision, AI initiative, new project, vendor evaluation |
+| 🟢 Event | Confirmed calendar event — prepend `📅 HH:MM —` to title (local time) |
 | ⚪ General | Everything else |
 
-**Meeting prep cards** — for each calendar event today:
-- If event has >1 attendee → create a card in **In Progress** column
-- Card title: `📅 HH:MM — [Meeting title]`
-- Card body: attendees count, location/Teams link if available
-- Priority: 🟢 Event (or 🔴 Urgent if it's in <30 min)
+### Meeting cards (calendar events)
+
+- Only include events with `showAs: busy` (not free, not tentative unless has a join link)
+- Include attendee count and location/link in card meta
+- Format: `📅 HH:MM — [title]` where HH:MM is **local time** (converted from UTC)
 
 ---
 
-## Step 4 — Build the HTML file
+## Step 4 — Build HTML
 
-Single self-contained file, no external dependencies.
+Single self-contained file. No external dependencies. RTL (`dir="rtl"`) when content is primarily Hebrew.
 
-### Layout
+### Structure
+
+```
+Header bar:
+  left: date in local language (יום X, DD בחודש YYYY)
+  center: greeting ☀️ (use user's name if known)
+  right: source pills — one per connected source that contributed data
 
 Three columns (CSS grid): 📋 Todo / 🔄 In Progress / ✅ Done
-Each column: header + live count badge + card list + `+` add button
-
-Header bar (top of page):
-- Left: date (`יום ראשון, 1 בינואר 2026` style — Hebrew if RTL, English otherwise; always use today's actual date)
-- Right: source pills showing which connectors contributed data (e.g. `📧 Outlook` `📅 Calendar` `💬 Teams`)
-- Center: greeting — "בוקר טוב ☀️" (Hebrew) or "Good morning ☀️" (English)
+Each column: title + live count + card list + [+] add button
+```
 
 ### Card structure
 
 ```
-┌────────────────────────────────────────┐
-│ ⠿  [× on hover]                        │
-│    Title (concise, ~50 chars max)      │
-│    [Source badge] [Priority badge]     │
-│    Link to original ↗ (if available)  │
-└────────────────────────────────────────┘
+┌──────────────────────────────────┐
+│ ⠿                            [×] │  ← drag handle + delete on hover
+│ Title (~50 chars max)            │
+│ [Source badge] [Priority badge]  │
+│ Link to original ↗ (if exists)  │
+│ Meta line (attendees, time, etc) │
+└──────────────────────────────────┘
 ```
 
 ### Add task form
 
-`+` → inline form per column:
-- Text input + tag selector (None / 🔴 Urgent / 🟡 Medium / 🔵 Strategic / 🟢 Event / ⚪ General)
-- Enter confirms, Escape cancels, count updates on add
+`+` opens inline form per column: text input + priority tag picker (Enter = confirm, Escape = cancel).
 
-### Drag and drop — mouse events only (not HTML5 drag API)
+### Drag & drop — mouse events only (NOT HTML5 drag API)
 
 ```
-mousedown → clone card as floating ghost (fixed pos), add .ghost to original
-mousemove → move ghost with cursor, show 3px blue drop indicator between cards
-mouseup   → insert original at indicator, remove ghost, update counts
+mousedown → clone as ghost (fixed position), mark original as dragging
+mousemove → move ghost, show 3px blue drop indicator between cards
+mouseup   → insert card at indicator, remove ghost, update column counts
 ```
 
-Done-column drops: set card `opacity: 0.6`.
+Done column: set dropped card to `opacity: 0.6`.
 
 ### Design tokens
 
 ```css
-body:        background #f5f5f3
-column:      background #ebebea, border-radius 12px
-card:        background #fff, border 0.5px solid #e0e0dc, border-radius 10px
-font:        -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif
+body:           background #f5f5f3
+column:         background #ebebea, border-radius 12px
+card:           background #fff, border 0.5px solid #e0e0dc, border-radius 10px
+font:           -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif
 
 /* Priority badges */
-.badge-red      { background: #FCEBEB; color: #a32d2d; }
-.badge-amber    { background: #FAEEDA; color: #854f0b; }
-.badge-blue     { background: #E6F1FB; color: #185fa5; }
-.badge-green    { background: #EAF3DE; color: #3b6d11; }
-.badge-gray     { background: #f1efe8; color: #666;    }
+.b-red    { background:#FCEBEB; color:#a32d2d }
+.b-amber  { background:#FAEEDA; color:#854f0b }
+.b-blue   { background:#E6F1FB; color:#185fa5 }
+.b-green  { background:#EAF3DE; color:#3b6d11 }
+.b-gray   { background:#f1efe8; color:#5F5E5A }
 
-/* Source badges */
-Outlook Email    → blue      (#E6F1FB / #185fa5)
-Outlook Calendar → green     (#EAF3DE / #3b6d11)
-Teams            → purple    (#EEEDFE / #534AB7)
-SharePoint       → teal      (#E0F4F4 / #0f7b7b)
-Jira             → blue-dark (#dbe9ff / #0052CC)
-Obsidian         → purple    (#EEEDFE / #534AB7)
-Notion           → dark      (#e8e8e4 / #37352f)
-Manual           → gray      (#f1efe8 / #666)
+/* Source badges — assign by source type, not by specific tool */
+Email     → blue   (#E6F1FB / #185fa5)
+Calendar  → green  (#EAF3DE / #3b6d11)
+Chat      → purple (#EEEDFE / #534AB7)
+Tasks     → amber  (#FAEEDA / #854f0b)   /* Jira, Linear, Asana, Notion */
+Manual    → gray   (#f1efe8 / #5F5E5A)
 ```
-
-RTL support: `<html dir="rtl">` when content is primarily Hebrew.
-Mixed Hebrew/English cards: cards stay in original language; layout is bilingual-friendly.
 
 ---
 
 ## Step 5 — Save and present
 
-1. Save as `morning_briefing_YYYY-MM-DD.html` in the outputs folder
-2. Provide a `computer://` link
-3. Add one line: "גרור כרטיסים בין עמודות, הוסף tasks עם `+`, מחק עם hover ו-`✕`."
-   (or English equivalent if user wrote in English)
-4. Offer: "רוצה שארוץ את זה אוטומטית כל בוקר? אפשר לתזמן עם ה-schedule skill."
+1. Save as `morning_briefing_YYYY-MM-DD.html` in outputs folder
+2. Share a `computer://` link
+3. One line: "גרור כרטיסים בין עמודות · הוסף עם `+` · מחק עם ✕ בריחוף"
+4. Optionally offer: "רוצה לקבל את זה אוטומטית כל בוקר? אפשר לתזמן."
 
 ---
 
 ## EOD Mode
 
-Triggered by: "end my day", "EOD", "סיים את היום", "daily wrap-up"
+Triggered by: "end my day" / "EOD" / "סיים את היום"
 
-### EOD data pull
+**Data pull:** Same sources, filter for today only. Limit 5 per source.
 
-Same MCP sources as morning, but filter for **today only**:
-- Outlook: emails sent today by user + emails received and replied to
-- Teams: messages sent today by user
-- Calendar: events that already ended today
-
-### EOD HTML output
-
-File: `eod_summary_YYYY-MM-DD.html`
-
-Three sections (read-only, no drag-and-drop):
+**Output file:** `eod_summary_YYYY-MM-DD.html` — read-only, three sections:
 
 | Section | Content |
 |---------|---------|
-| ✅ Accomplished today | Items moved to Done + sent emails + completed Jira tickets |
-| 🔄 Carrying over | Items still in Todo/In Progress → auto-moved to tomorrow's board |
-| 📋 Tomorrow's focus | Top 3 priorities for tomorrow (AI-scored from carryover) |
-
-Footer: "סיכום יום — [date]" with time of generation.
-
-After presenting EOD file, ask:
-> "רוצה שאשלח את הסיכום ב-Teams לצוות שלך?"
+| ✅ Accomplished | Emails sent/replied, Jira items closed, events completed |
+| 🔄 Carrying over | Open Todo items → will become tomorrow's board |
+| 📋 Tomorrow's top 3 | AI-ranked priorities from carryover |
 
 ---
 
 ## Edge cases
 
-| Situation | Handling |
-|-----------|---------|
-| No connectors, nothing pasted | Ask user to paste or connect. Don't generate empty board. |
-| Only newsletters/automated alerts | Group into one "Alerts (skip)" card in Todo |
-| 20+ items | Max ~5 per column, group low-priority under one "וכו'..." card |
-| Mixed Hebrew/English | Cards stay in original language; UI adapts to dominant language |
-| Jira items with no assignee | Skip (not the user's problem) |
-| SharePoint docs — no clear action | One grouped card: "📄 Updated docs today (N)" |
-| User wants automation | Suggest `schedule` skill for daily runs at a set time |
-| Teams message is just a reaction/emoji | Skip |
+| Situation | Action |
+|-----------|--------|
+| No data anywhere | Ask user to paste. Never invent cards. |
+| Only newsletters/automated | One grouped "Alerts (skip)" card, or omit entirely |
+| >15 total items | Cap at 5 per column, group remainder |
+| Tentative event, no join link | Skip |
+| Tentative event + join link | Include, mark ⚠️ לא אושר |
+| UTC times from calendar | Always convert to local time before showing |
+| Mixed Hebrew/English | Cards stay in source language; UI adapts to majority |
+| User wants scheduling | Suggest `schedule` skill |
