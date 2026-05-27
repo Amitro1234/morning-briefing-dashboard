@@ -1,6 +1,6 @@
 # Morning Briefing Dashboard — Claude Skill
 
-![version](https://img.shields.io/badge/version-1.1.0-blue)
+![version](https://img.shields.io/badge/version-1.2.0-blue)
 
 > One prompt → interactive daily kanban board, built from your real inbox, calendar, and tasks.
 
@@ -35,16 +35,18 @@ Claude pulls from your connected sources, classifies everything by urgency, and 
 
 ## Integrations
 
+The skill is **connector-agnostic** — it detects whatever is installed and pulls from all available sources automatically. No configuration required.
+
 ### Auto-pull (MCP connectors)
 
-Works with any connected source — the skill detects what's available and pulls accordingly:
+| Source type | Supported connectors | Install via |
+|-------------|---------------------|-------------|
+| **Email** | Outlook / Microsoft 365, Gmail / Google Workspace | Cowork → Plugins → Browse |
+| **Calendar** | Outlook Calendar, Google Calendar | Cowork → Plugins → Browse |
+| **Tasks & issues** | Jira, Linear, Asana, Notion, Monday, ClickUp, GitHub Issues | Cowork → Plugins → Browse |
+| **Chat** | Slack, Microsoft Teams | Cowork → Plugins → Browse (used only as fallback) |
 
-| Source type | Examples |
-|-------------|---------|
-| **Email** | Outlook, Gmail |
-| **Calendar** | Outlook Calendar, Google Calendar |
-| **Tasks & issues** | Jira, Linear, Asana, Notion |
-| **Chat** | Teams, Slack — used only if no other data available |
+> Adding a new connector? No skill update needed — Claude detects it automatically at runtime.
 
 ### Paste-in (no connector needed)
 
@@ -53,6 +55,7 @@ Works with any connected source — the skill detects what's available and pulls
 | **Jira** | Copy tickets / board view → paste in chat |
 | **Obsidian** | Paste daily note — `- [ ]` / `- [/]` / `- [x]` → Todo / In Progress / Done |
 | **Notion** | Paste exported content or page text |
+| **GitHub / GitLab** | Paste issue list or milestone view |
 | **Any text** | Free-form — Claude figures it out |
 
 ---
@@ -82,9 +85,15 @@ Drop this repo into your project root. The agent reads `CLAUDE.md` → follows `
 
 ## Connecting sources
 
-Connect any source via Cowork → Plugins → Connectors. The skill works with whatever is connected — no need for all of them.
+**Claude Desktop → Cowork → Plugins → Browse Connectors**
 
-For paste-in sources (Jira, Obsidian, Notion, etc.) — just paste content directly in chat, no connector needed.
+Install the connectors for the tools you use. The skill works with whatever is connected — you don't need all of them. Recommended starting point:
+
+- **Microsoft 365** — covers Outlook email + calendar + Teams in one connector
+- **Jira** — pulls assigned tickets directly into the board
+- **Slack** — used only as fallback when no email/calendar data is available
+
+For paste-in sources (Jira board copy, Obsidian note, Notion export, etc.) — no connector needed, just paste directly in chat.
 
 ---
 
@@ -124,6 +133,16 @@ morning-briefing-dashboard/
 
 > **For contributors:** all skill logic lives exclusively in `morning-briefing/SKILL.md`.
 > README and CLAUDE.md contain no duplicated implementation details.
+
+---
+
+## Changelog
+
+| Version | What changed |
+|---------|-------------|
+| **1.2.0** | Dynamic connector detection — Jira, Linear, Asana, Monday, GitHub Issues, ClickUp auto-detected at runtime. No skill update needed when adding new connectors. |
+| **1.1.0** | Generic rewrite — removed Microsoft-specific hardcoding. Works with any email/calendar/task source. Token efficiency rules added. |
+| **1.0.0** | Initial release — Microsoft 365 edition. |
 
 ---
 

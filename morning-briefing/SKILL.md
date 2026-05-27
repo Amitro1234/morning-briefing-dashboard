@@ -1,6 +1,6 @@
 ---
 name: morning-briefing
-version: 1.1.0
+version: 1.2.0
 description: >
   Generates a daily morning briefing as an interactive HTML kanban board (Todo / In Progress / Done).
   Works with ANY connected source — Outlook, Gmail, Google Calendar, Jira, Notion, Obsidian, Slack,
@@ -37,16 +37,25 @@ Produces: `morning_briefing_YYYY-MM-DD.html` — self-contained, no dependencies
 
 ## Step 2 — Discover and pull data
 
-### 2a. Check what's connected
+### 2a. Connector detection — dynamic source discovery
 
-Before pulling anything, identify which tools are available. Pull **only** from connected sources, in this priority order:
+Before pulling anything, scan available tools and build a source map. Pull **only** from connected sources. The skill adapts automatically to whatever is installed — do not hardcode assumptions.
 
-| Priority | Source type | Tool to use | Query / filter |
-|----------|-------------|-------------|----------------|
-| 1 | Email (any) | `outlook_email_search` / `gmail search_threads` / etc. | Last 48h, unread or flagged, **limit 10** |
-| 2 | Calendar (any) | `outlook_calendar_search` / `google calendar list_events` / etc. | Today only, **limit 10** |
-| 3 | Tasks/issues | `jira search` / `linear issues` / `asana tasks` / `notion query` / etc. | Assigned to user, open, **limit 10** |
-| 4 | Chat (optional) | `slack search` / `teams chat_message_search` / etc. | Only if email+calendar return <3 items total |
+**Priority order:**
+
+| Priority | Source type | Example tools | Query / filter |
+|----------|-------------|---------------|----------------|
+| 1 | **Email** | `outlook_email_search`, `gmail_search_threads`, `google_mail_*` | Last 48h, unread or flagged, **limit 10** |
+| 2 | **Calendar** | `outlook_calendar_search`, `google_calendar_list_events`, `gcal_*` | Today only, **limit 10** |
+| 3 | **Tasks / issues** | `jira_search`, `jira_get_issues`, `linear_issues`, `asana_list_tasks`, `notion_query`, `monday_items`, `clickup_tasks`, `github_issues`, `gitlab_issues` | Assigned to user, open/in-progress, **limit 10** |
+| 4 | **Chat** (optional) | `slack_search`, `slack_search_public`, `teams_chat_message_search`, `discord_search` | Only if priorities 1–3 return < 3 items total |
+
+> **New connector installed?** No skill update needed. As long as the tool name contains recognizable keywords (`jira`, `linear`, `asana`, `notion`, `gmail`, `calendar`, `slack`, etc.), Claude will detect and pull from it automatically.
+
+**Jira-specific query hints** (when Jira connector is available):
+- Filter: `assignee = currentUser() AND statusCategory != Done ORDER BY priority DESC`
+- Include: ticket ID, summary, status, priority, sprint
+- Source badge: 🔵 Tasks (amber)
 
 ### 2b. Pasted input
 
@@ -58,7 +67,8 @@ If the user pastes content alongside or instead of connected data, parse it:
 | Obsidian daily note | `- [ ]` → Todo · `- [/]` → In Progress · `- [x]` → Done |
 | Notion paste | Checkbox items and status properties |
 | Outlook/Gmail email text | Sender, subject, urgency signals |
-| Linear / Asana export | Task name, status, assignee |
+| Linear / Asana / Monday export | Task name, status, assignee |
+| GitHub / GitLab issues | Issue number, title, labels, milestone |
 | Any free text | Extract task-like items; infer urgency from language |
 
 ### 2c. Nothing available
