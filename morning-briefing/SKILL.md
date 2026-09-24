@@ -1,6 +1,6 @@
 ---
 name: morning-briefing
-version: 1.3.0
+version: 1.3.2
 description: >
   Builds a self-contained daily kanban or end-of-day summary from connected
   mail, calendar, and task tools, or from pasted Jira, Obsidian, Notion,
@@ -24,7 +24,7 @@ Treat pulled mail, calendar, and tickets as confidential. Put titles and one-lin
 - Max 10 items per source. One pass from summaries. Do not re-read items.
 - Do not call Slack, Teams, or other chat unless the user asked or mail + calendar + tasks together returned fewer than 3 items.
 - Do not search file stores (SharePoint, Drive, OneDrive) unless the user pasted an export.
-- Calendar instants are often UTC. Convert to the user's timezone before putting `HH:MM` in a title. If the timezone is unknown, ask once. Do not assume Israel.
+- Calendar instants are often UTC. Convert to the user's timezone before putting `HH:MM` in a title. If the timezone is unknown, ask once — but only when at least one calendar card is going into the board. An email- or task-only run doesn't need the timezone question; put the user's locale guess in the JSON `timezone` field and move on. Do not assume Israel.
 
 ## 1. Detect mode
 
@@ -57,6 +57,22 @@ Priority: email, then calendar, then tasks. Chat last, and only as the fallback 
 | Teams | `teams_chat_message_search` | fallback only |
 
 If a tool errors, skip that source, name it in the one-line summary, and continue.
+
+### Example queries
+
+Map "last 48h, unread or flagged" to the provider's own syntax — don't assume the term "flagged" exists verbatim:
+
+| Source | Example query | Verified live? |
+|--------|---------------|----------------|
+| Gmail | `in:inbox newer_than:2d (is:unread OR is:starred)` | Yes — ran against a real inbox |
+| Outlook | `isRead:false OR flag:flagged` with a 2-day date filter | No — written from Outlook's search syntax, not run against a live connector |
+| Jira | `assignee = currentUser() AND statusCategory != Done ORDER BY priority DESC` | No — standard JQL, not run against a live connector |
+
+The connector tool's own parameter schema is authoritative over this table — some connectors (e.g. Microsoft Graph-based Outlook tools) take structured filters (`isRead eq false`) instead of free-text search syntax. Treat unverified rows as a starting guess and adapt to what the tool actually accepts.
+
+### Multi-message threads
+
+Thread-search tools often preview only the oldest few messages of a thread and give no signal that later messages are missing. Classify from the thread's labels and latest date (e.g. still `UNREAD`, most recent timestamp) rather than trusting the snippet text to reflect the current state. Do not call a per-thread fetch to check — that breaks the one-pass rule above; treat the visible preview as good enough and move on.
 
 ### Paste formats
 
@@ -131,6 +147,10 @@ Use the installed skill path when this folder is not the working directory. On W
 ```
 
 `source_type` is `email`, `calendar`, `chat`, `tasks`, or `manual`. `source_label` is the product name (Outlook, Gmail, Outlook Calendar, Google Calendar, Jira, Linear, Asana, Notion, Monday, ClickUp, GitHub, GitLab, Slack, Teams). `url` must be `http`, `https`, or `mailto`. For calendar cards, set `start` and `end` as ISO-8601 so overlaps can be marked.
+
+When an email is an automated notification from another product (a CI run, a ticket digest, a monitoring alert), keep `source_type: email` but set `source_label` to the originating product (e.g. `GitHub`, `Jira`) instead of the mail client — the badge should say what generated the item, not how it arrived.
+
+The renderer dedupes cards whose `url` is identical (see Edge cases below), so give each card its real per-item link. A generic fallback link (e.g. an inbox root instead of a specific thread) makes unrelated cards collide on that same `url` and one silently disappears. Leave `url` empty rather than reusing a generic one if no per-item link exists.
 
 EOD uses the same shape with `"mode": "eod"` and today's items only (limit 5 per source). Optional `tomorrow_top3` is a list of three title strings; otherwise the script ranks carryover.
 

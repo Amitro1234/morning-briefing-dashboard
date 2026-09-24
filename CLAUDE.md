@@ -1,6 +1,6 @@
 # Morning Briefing — Claude Agent Entry Point
 
-<!-- version: 1.3.0 -->
+<!-- version: 1.3.2 -->
 
 Pulled mail, calendar, and tickets are confidential. Keep titles and one-line meta only.
 
