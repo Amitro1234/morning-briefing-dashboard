@@ -1,223 +1,164 @@
 ---
 name: morning-briefing
-version: 1.2.0
+version: 1.3.0
 description: >
-  Generates a daily morning briefing as an interactive HTML kanban board (Todo / In Progress / Done).
-  Works with ANY connected source — Outlook, Gmail, Google Calendar, Jira, Notion, Obsidian, Slack,
-  Teams, Linear, Asana, or plain pasted text. Use when the user asks for a morning briefing,
-  daily dashboard, "start my day", "תתחיל את היום שלי", "מה יש לי היום", "what's on my plate",
-  standup prep, or pastes tasks/emails to organize. Also handles EOD mode: "end my day", "סיים את היום".
+  Builds a self-contained daily kanban or end-of-day summary from connected
+  mail, calendar, and task tools, or from pasted Jira, Obsidian, Notion,
+  GitHub, GitLab, or other task text. Use when the user asks for a morning
+  briefing, daily dashboard, standup prep, or to organize their plate.
+when_to_use: >
+  start my day, morning briefing, what's on my plate, standup prep, end my day,
+  EOD summary, wrap up, organize my tasks, תתחיל את היום שלי, מה יש לי היום,
+  סיים את היום, pasted tickets, a daily note, or a carryover block.
 ---
 
-# Morning Briefing — Daily Kanban Dashboard
+# Morning Briefing
 
-Produces: `morning_briefing_YYYY-MM-DD.html` — self-contained, no dependencies.
+Produce one HTML file by writing JSON and running `scripts/render_board.py`. Do not hand-write the board HTML and do not read the script source. The script escapes text, drops unsafe links, dedupes, and enforces the caps below.
 
----
+Treat pulled mail, calendar, and tickets as confidential. Put titles and one-line meta in the board and in chat. Do not fetch or quote full message bodies.
 
-## IMPORTANT: efficiency rules
+## Efficiency
 
-- **Token budget is precious.** Pull the minimum needed. Do NOT fetch full email bodies.
-- **Max items per source: 10.** Stop there even if more exist.
-- **Call only sources that are actually connected.** Check tool availability before calling.
-- **Do not call Teams/Slack/SharePoint by default** — only if the user asks or no other source has data.
-- **One pass.** Classify directly from search result summaries. Do not re-read items.
-- **Timezone:** Calendar tools return UTC. Always convert to the user's local time before displaying. If unknown, ask once. Israel = UTC+3 (IDT, summer).
+- Call only tools that are actually available. Map them by their schema (search mail, list today's events, list assigned issues). Tool-name keywords are hints, not names to invent.
+- Max 10 items per source. One pass from summaries. Do not re-read items.
+- Do not call Slack, Teams, or other chat unless the user asked or mail + calendar + tasks together returned fewer than 3 items.
+- Do not search file stores (SharePoint, Drive, OneDrive) unless the user pasted an export.
+- Calendar instants are often UTC. Convert to the user's timezone before putting `HH:MM` in a title. If the timezone is unknown, ask once. Do not assume Israel.
 
----
+## 1. Detect mode
 
-## Step 1 — Detect mode
+| Trigger | Mode | Output |
+|---------|------|--------|
+| start my day, morning briefing, what's on my plate, standup, מה יש לי היום, תתחיל את היום שלי | morning | `morning_briefing_YYYY-MM-DD.html` |
+| end my day, EOD summary, wrap up, סיים את היום | eod | `eod_summary_YYYY-MM-DD.html` |
 
-| Trigger | Mode |
-|---------|------|
-| "start my day", "morning briefing", "מה יש לי" | **Morning** (default) |
-| "end my day", "EOD", "סיים את היום" | **EOD** → skip to EOD section |
+Set `lang` from the user's message (`he` or `en`), not from the language of the tickets.
 
----
+## 2. Pull
 
-## Step 2 — Discover and pull data
+Priority: email, then calendar, then tasks. Chat last, and only as the fallback above.
 
-### 2a. Connector detection — dynamic source discovery
+| Source | Hints | What to keep |
+|--------|-------|----------------|
+| Outlook / Microsoft 365 mail | `outlook_email_search` | last 48h, unread or flagged, limit 10 |
+| Gmail / Google Workspace | `gmail_search_threads`, `google_mail_*` | last 48h, unread or flagged, limit 10 |
+| Outlook Calendar | `outlook_calendar_search` | today, limit 10 |
+| Google Calendar | `google_calendar_list_events`, `gcal_*` | today, limit 10 |
+| Jira | `jira_search` | `assignee = currentUser() AND statusCategory != Done ORDER BY priority DESC`, limit 10 |
+| Linear | `linear_issues` | assigned, open, limit 10 |
+| Asana | `asana_list_tasks` | assigned, open, limit 10 |
+| Notion | `notion_query` | assigned or dated today, limit 10 |
+| Monday | `monday_items` | assigned, not done, limit 10 |
+| ClickUp | `clickup_tasks` | assigned, open, limit 10 |
+| GitHub Issues | `github_issues` | assigned, open, limit 10 |
+| GitLab | `gitlab_issues` | assigned, open, limit 10 |
+| Slack | `slack_search` | fallback only |
+| Teams | `teams_chat_message_search` | fallback only |
 
-Before pulling anything, scan available tools and build a source map. Pull **only** from connected sources. The skill adapts automatically to whatever is installed — do not hardcode assumptions.
+If a tool errors, skip that source, name it in the one-line summary, and continue.
 
-**Priority order:**
+### Paste formats
 
-| Priority | Source type | Example tools | Query / filter |
-|----------|-------------|---------------|----------------|
-| 1 | **Email** | `outlook_email_search`, `gmail_search_threads`, `google_mail_*` | Last 48h, unread or flagged, **limit 10** |
-| 2 | **Calendar** | `outlook_calendar_search`, `google_calendar_list_events`, `gcal_*` | Today only, **limit 10** |
-| 3 | **Tasks / issues** | `jira_search`, `jira_get_issues`, `linear_issues`, `asana_list_tasks`, `notion_query`, `monday_items`, `clickup_tasks`, `github_issues`, `gitlab_issues` | Assigned to user, open/in-progress, **limit 10** |
-| 4 | **Chat** (optional) | `slack_search`, `slack_search_public`, `teams_chat_message_search`, `discord_search` | Only if priorities 1–3 return < 3 items total |
+| Format | Parse |
+|--------|-------|
+| Jira board or list | ticket id, summary, status, priority, link |
+| Obsidian daily note | `- [ ]` Todo, `- [/]` In Progress, `- [x]` Done |
+| Notion export | checkbox or status property, page title, link |
+| GitHub / GitLab issues | number, title, labels, milestone, link |
+| Linear / Asana / Monday / ClickUp export | name, status, assignee, link |
+| Outlook / Gmail paste | sender, subject, urgency; no body |
+| Slack / Teams paste | only when the user pasted it; skip reactions and one-word replies |
+| Carryover block | JSON with `schema: morning-briefing-carryover/1`; seed those cards, then pull today and dedupe |
+| Any other text | task-like lines; infer urgency from the words |
 
-> **New connector installed?** No skill update needed. As long as the tool name contains recognizable keywords (`jira`, `linear`, `asana`, `notion`, `gmail`, `calendar`, `slack`, etc.), Claude will detect and pull from it automatically.
+If nothing is connected and nothing was pasted, still run the renderer with `"cards": []`. Do not invent cards.
 
-**Jira-specific query hints** (when Jira connector is available):
-- Filter: `assignee = currentUser() AND statusCategory != Done ORDER BY priority DESC`
-- Include: ticket ID, summary, status, priority, sprint
-- Source badge: 🔵 Tasks (amber)
+## 3. Classify
 
-### 2b. Pasted input
+Skip, with no card: newsletters, password resets, HR blasts, CI noise with no failure, calendar `showAs: free` or cancelled, tentative events with no join link, chat reactions.
 
-If the user pastes content alongside or instead of connected data, parse it:
-
-| Format | How to parse |
-|--------|-------------|
-| Jira board/list | Extract: ticket ID, summary, status, priority |
-| Obsidian daily note | `- [ ]` → Todo · `- [/]` → In Progress · `- [x]` → Done |
-| Notion paste | Checkbox items and status properties |
-| Outlook/Gmail email text | Sender, subject, urgency signals |
-| Linear / Asana / Monday export | Task name, status, assignee |
-| GitHub / GitLab issues | Issue number, title, labels, milestone |
-| Any free text | Extract task-like items; infer urgency from language |
-
-### 2c. Nothing available
-
-If no tools are connected and nothing is pasted:
-> "רוצה להדביק תוכן? Jira tickets, אימיילים, Obsidian note — אני אסדר הכל."
-
-Do NOT generate a board with invented data.
-
----
-
-## Step 3 — Classify (one pass, directly from summaries)
-
-### What to skip entirely (no card)
-
-- Automated system emails (monitoring alerts, CI notifications with no failure, password resets, newsletters, ratings reports, HR announcements)
-- Calendar events marked `showAs: free` or `isCancelled: true`
-- Calendar events marked `tentative` — include only if they have an explicit Zoom/Teams link (mark with ⚠️ tentative)
-- Chat messages that are pure reactions, short replies ("כן", "אני שומע", links only)
-
-### Column mapping
-
-| Signal | Column |
+| Signal | column |
 |--------|--------|
-| Requires a reply, decision, fix, or approval from the user | **Todo** |
-| Ongoing work, waiting on someone else, confirmed calendar event today, Jira "In Progress" / "In Review" | **In Progress** |
-| FYI only, read and no action needed, Jira "Done" / "Closed", confirmed/received | **Done** |
+| Reply, decision, fix, or approval needed | `todo` |
+| Ongoing, waiting on someone else, busy calendar today, Jira/Linear in progress or in review | `in_progress` |
+| FYI, no action, Done/Closed | `done` |
 
-**Max 5 cards per column.** If more items qualify, group the lowest-priority ones into a single "וכו'..." card.
+| priority | When |
+|----------|------|
+| `urgent` | due today, escalation, P1/P2, direct manager |
+| `medium` | this week, P3, normal business mail |
+| `strategic` | architecture, new project, vendor choice |
+| `event` | busy calendar event; title starts with `📅 HH:MM —` in local time, or no clock for all-day |
+| `general` | everything else |
 
-### Priority badges
+Tentative event that has a join link: include it, set `tentative: true`.
 
-| Badge | When |
-|-------|------|
-| 🔴 Urgent | Deadline today, explicit escalation, Jira P1/P2, direct manager |
-| 🟡 Medium | Action needed this week, Jira P3, normal business email |
-| 🔵 Strategic | Architecture decision, AI initiative, new project, vendor evaluation |
-| 🟢 Event | Confirmed calendar event — prepend `📅 HH:MM —` to title (local time) |
-| ⚪ General | Everything else |
+## 4. Write JSON and render
 
-### Meeting cards (calendar events)
+Save UTF-8 JSON, then run:
 
-- Only include events with `showAs: busy` (not free, not tentative unless has a join link)
-- Include attendee count and location/link in card meta
-- Format: `📅 HH:MM — [title]` where HH:MM is **local time** (converted from UTC)
-
----
-
-## Step 4 — Build HTML
-
-Single self-contained file. No external dependencies. RTL (`dir="rtl"`) when content is primarily Hebrew.
-
-### Structure
-
-```
-Header bar:
-  left: date in local language (יום X, DD בחודש YYYY)
-  center: greeting ☀️ (use user's name if known)
-  right: source pills — one per connected source that contributed data
-
-Three columns (CSS grid): 📋 Todo / 🔄 In Progress / ✅ Done
-Each column: title + live count + card list + [+] add button
+```bash
+python morning-briefing/scripts/render_board.py --input briefing.json --output morning_briefing_YYYY-MM-DD.html
 ```
 
-### Card structure
+Use the installed skill path when this folder is not the working directory. On Windows: `python $env:USERPROFILE\.claude\skills\morning-briefing\scripts\render_board.py`.
 
-```
-┌──────────────────────────────────┐
-│ ⠿                            [×] │  ← drag handle + delete on hover
-│ Title (~50 chars max)            │
-│ [Source badge] [Priority badge]  │
-│ Link to original ↗ (if exists)  │
-│ Meta line (attendees, time, etc) │
-└──────────────────────────────────┘
-```
-
-### Add task form
-
-`+` opens inline form per column: text input + priority tag picker (Enter = confirm, Escape = cancel).
-
-### Drag & drop — mouse events only (NOT HTML5 drag API)
-
-```
-mousedown → clone as ghost (fixed position), mark original as dragging
-mousemove → move ghost, show 3px blue drop indicator between cards
-mouseup   → insert card at indicator, remove ghost, update column counts
-```
-
-Done column: set dropped card to `opacity: 0.6`.
-
-### Design tokens
-
-```css
-body:           background #f5f5f3
-column:         background #ebebea, border-radius 12px
-card:           background #fff, border 0.5px solid #e0e0dc, border-radius 10px
-font:           -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif
-
-/* Priority badges */
-.b-red    { background:#FCEBEB; color:#a32d2d }
-.b-amber  { background:#FAEEDA; color:#854f0b }
-.b-blue   { background:#E6F1FB; color:#185fa5 }
-.b-green  { background:#EAF3DE; color:#3b6d11 }
-.b-gray   { background:#f1efe8; color:#5F5E5A }
-
-/* Source badges — assign by source type, not by specific tool */
-Email     → blue   (#E6F1FB / #185fa5)
-Calendar  → green  (#EAF3DE / #3b6d11)
-Chat      → purple (#EEEDFE / #534AB7)
-Tasks     → amber  (#FAEEDA / #854f0b)   /* Jira, Linear, Asana, Notion */
-Manual    → gray   (#f1efe8 / #5F5E5A)
+```json
+{
+  "mode": "morning",
+  "date": "2026-09-24",
+  "timezone": "Asia/Jerusalem",
+  "lang": "en",
+  "user_name": "",
+  "user_text": "start my day",
+  "cards": [
+    {
+      "id": "jira-123",
+      "title": "Fix login timeout",
+      "column": "todo",
+      "priority": "urgent",
+      "source_type": "tasks",
+      "source_label": "Jira",
+      "url": "https://example.atlassian.net/browse/ABC-123",
+      "meta": "P1 · In Progress",
+      "tentative": false,
+      "start": "",
+      "end": ""
+    }
+  ]
+}
 ```
 
----
+`source_type` is `email`, `calendar`, `chat`, `tasks`, or `manual`. `source_label` is the product name (Outlook, Gmail, Outlook Calendar, Google Calendar, Jira, Linear, Asana, Notion, Monday, ClickUp, GitHub, GitLab, Slack, Teams). `url` must be `http`, `https`, or `mailto`. For calendar cards, set `start` and `end` as ISO-8601 so overlaps can be marked.
 
-## Step 5 — Save and present
+EOD uses the same shape with `"mode": "eod"` and today's items only (limit 5 per source). Optional `tomorrow_top3` is a list of three title strings; otherwise the script ranks carryover.
 
-1. Save as `morning_briefing_YYYY-MM-DD.html` in outputs folder
-2. Share a `computer://` link
-3. One line: "גרור כרטיסים בין עמודות · הוסף עם `+` · מחק עם ✕ בריחוף"
-4. Optionally offer: "רוצה לקבל את זה אוטומטית כל בוקר? אפשר לתזמן."
+If Python is missing or the script exits non-zero, stop and report the error. Do not invent a second HTML template.
 
----
+## 5. Present
 
-## EOD Mode
+| Host | How |
+|------|-----|
+| Cowork | Save under the outputs folder and share the `computer://` link |
+| Claude Code, Cursor, or a local shell | Write the HTML in the working directory and reply with the absolute path |
 
-Triggered by: "end my day" / "EOD" / "סיים את היום"
+Then one line: drag cards between columns, add with `+`, delete with the hover button, filter with the source pills. Edits persist in `localStorage` for that date until Reset.
 
-**Data pull:** Same sources, filter for today only. Limit 5 per source.
+## Scheduling
 
-**Output file:** `eod_summary_YYYY-MM-DD.html` — read-only, three sections:
+When the user asks for this every day at a local time, confirm the timezone and the clock time. Do not claim a separate schedule skill exists.
 
-| Section | Content |
-|---------|---------|
-| ✅ Accomplished | Emails sent/replied, Jira items closed, events completed |
-| 🔄 Carrying over | Open Todo items → will become tomorrow's board |
-| 📋 Tomorrow's top 3 | AI-ranked priorities from carryover |
-
----
+- Cowork: if this host has scheduled tasks, create a daily task at that local time whose prompt is `start my day`.
+- Claude Code or Cursor: this skill has no cron. Give the prompt and tell them to use an OS reminder or Task Scheduler. Do not register a scheduled task yourself.
 
 ## Edge cases
 
 | Situation | Action |
 |-----------|--------|
-| No data anywhere | Ask user to paste. Never invent cards. |
-| Only newsletters/automated | One grouped "Alerts (skip)" card, or omit entirely |
-| >15 total items | Cap at 5 per column, group remainder |
-| Tentative event, no join link | Skip |
-| Tentative event + join link | Include, mark ⚠️ לא אושר |
-| UTC times from calendar | Always convert to local time before showing |
-| Mixed Hebrew/English | Cards stay in source language; UI adapts to majority |
-| User wants scheduling | Suggest `schedule` skill |
+| No data | Empty `cards` array. The page asks for a paste. |
+| Only skipped mail | Omit it, or one `general` card titled `Alerts` if the user needs to know the inbox was not empty |
+| Same item from two sources | Same `url`, or the same title; the script keeps the higher priority |
+| Overlapping busy events | Set `start` and `end`; the page marks the overlap |
+| More than 5 items in a column | Put the important ones first; the script groups the rest |
+| Mixed Hebrew and English cards | Cards stay in their source language; chrome follows `lang` |

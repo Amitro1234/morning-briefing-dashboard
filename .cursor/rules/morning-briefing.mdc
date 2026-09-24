@@ -1,0 +1,6 @@
+---
+description: Use when the user asks for a morning briefing, start my day, end my day, standup prep, or pastes Jira, Obsidian, Notion, GitHub, GitLab, or other tasks to organize into a board.
+alwaysApply: false
+---
+
+Read and follow `morning-briefing/SKILL.md`. Do not duplicate it. Render the board only by running `morning-briefing/scripts/render_board.py`.

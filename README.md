@@ -1,6 +1,6 @@
 # Morning Briefing Dashboard — Claude Skill
 
-![version](https://img.shields.io/badge/version-1.2.0-blue)
+![version](https://img.shields.io/badge/version-1.3.0-blue)
 
 > One prompt → interactive daily kanban board, built from your real inbox, calendar, and tasks.
 
@@ -71,10 +71,12 @@ The skill is **connector-agnostic** — it detects whatever is installed and pul
 
 ```bash
 # macOS / Linux
-cp -r morning-briefing/ ~/.claude/skills/
+mkdir -p ~/.claude/skills
+cp -r morning-briefing ~/.claude/skills/morning-briefing
 
 # Windows (PowerShell)
-Copy-Item -Recurse morning-briefing\ "$env:APPDATA\Claude\skills\"
+New-Item -ItemType Directory -Force "$env:USERPROFILE\.claude\skills" | Out-Null
+Copy-Item -Recurse -Force morning-briefing "$env:USERPROFILE\.claude\skills\morning-briefing"
 ```
 
 ### Option 3 — IDE agent (Cursor, Windsurf, etc.)
@@ -126,9 +128,10 @@ set up my morning briefing every day at 7:30am
 morning-briefing-dashboard/
 ├── README.md                  ← you are here
 ├── CLAUDE.md                  ← IDE agent entry point → points to SKILL.md
-├── morning-briefing.skill     ← installable skill file (Cowork / Claude Code)
+├── morning-briefing.skill     ← built by tools/package_skill.py
 └── morning-briefing/
-    └── SKILL.md               ← canonical spec (single source of truth)
+    ├── SKILL.md               ← canonical spec (single source of truth)
+    └── scripts/render_board.py
 ```
 
 > **For contributors:** all skill logic lives exclusively in `morning-briefing/SKILL.md`.
@@ -140,6 +143,7 @@ morning-briefing-dashboard/
 
 | Version | What changed |
 |---------|-------------|
+| **1.3.0** | One packaged spec. The board is rendered by `scripts/render_board.py` (escaped text, safe links, dedupe, caps, overlap, local edits). Claude Code installs under `~/.claude/skills`. Every README source has an explicit pull or paste rule. |
 | **1.2.0** | Dynamic connector detection — Jira, Linear, Asana, Monday, GitHub Issues, ClickUp auto-detected at runtime. No skill update needed when adding new connectors. |
 | **1.1.0** | Generic rewrite — removed Microsoft-specific hardcoding. Works with any email/calendar/task source. Token efficiency rules added. |
 | **1.0.0** | Initial release — Microsoft 365 edition. |
